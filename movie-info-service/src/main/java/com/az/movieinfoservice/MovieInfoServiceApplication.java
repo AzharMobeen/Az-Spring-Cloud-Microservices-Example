@@ -2,6 +2,8 @@ package com.az.movieinfoservice;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.web.client.RestTemplate;
 
 @SpringBootApplication
 public class MovieInfoServiceApplication {
@@ -10,4 +12,8 @@ public class MovieInfoServiceApplication {
 		SpringApplication.run(MovieInfoServiceApplication.class, args);
 	}
 
+	@Bean
+	public RestTemplate getRestTemplate() {
+		return new RestTemplate();
+	}
 }

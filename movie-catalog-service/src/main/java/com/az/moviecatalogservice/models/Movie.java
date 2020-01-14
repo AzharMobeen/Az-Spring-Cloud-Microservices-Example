@@ -8,7 +8,8 @@ import lombok.NoArgsConstructor;
 public class Movie {
 
 	private String movieId;
-	private String movieName;	
+	private String movieName;
+	private String description;
 	
 	
 	public Movie(String movieId,String movieName) {		

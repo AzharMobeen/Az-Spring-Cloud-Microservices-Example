@@ -1,10 +1,7 @@
 # Read Me First
-The following was discovered as part of building this project:
-
-* The original package name 'com.az.movie-catalog-service' is invalid and this project uses 'com.az.moviecatalogservice' instead.
+This microservice will call two other microservices for movie info and movie rating and then combine them as movie catalog and send as response.
 
 # Getting Started
-
 
 ### Notes:
 * For Spring cloud we should add these thinks in pom else we'll face error in pom.xml
@@ -33,4 +30,105 @@ The following was discovered as part of building this project:
 		</dependencies>
 	</dependencyManagement>
 * @EnableEurekaClient on main class is optional now, before it was mandatory up to certain version. Now Just add dependency it will work fine. 
-* For add application name for Eureka server to display application name for better understanding.
+* For add application name for Eureka server to display application name and later we'll use these name to call service resources.
+* Now need to add @LoadBalance annotation to RestTemplate and after that we can call any service end point wiht calling it's ip and port like bellow:
+	
+	@Bean
+	@LoadBalanced
+	public RestTemplate getRestTemplate() {
+		return new RestTemplate();
+	}
+
+	
+	@RequestMapping("/{userId}")
+	public List<CatalogItem> getCatalog(@PathVariable String userId){						
+		UserRating ratings = restTemplate.getForObject("http://rating-data-service/ratingsdata/users/"+userId, UserRating.class);		
+		return ratings.getUserRating().stream().map(rating-> {
+			Movie movie = restTemplate.getForObject("http://movie-info-service/movies/"+rating.getMovieId(), Movie.class);
+			return new CatalogItem(movie.getMovieName(),"Test",rating.getRating());
+			}).collect(Collectors.toList());		
+	}
+* When we are facing one of microservice giving response very slow then whole application become very slow
+* solution for this problem is to set timeouts in restTemplat:
+	
+	@Bean
+	@LoadBalanced
+	public RestTemplate getRestTemplate() {
+		HttpComponentsClientHttpRequestFactory httpComponentsClientHttpRequestFactory = new HttpComponentsClientHttpRequestFactory();
+		// 3000 Milliseconds which is equals to seconds  
+		httpComponentsClientHttpRequestFactory.setConnectTimeout(3000);
+		return new RestTemplate(httpComponentsClientHttpRequestFactory);
+	}
+* But above solution will not solve the problem permanently because if frequency of requests are faster than this time out it'll become slow or blast after a while.
+* So the permanent solution is to use Circuit Breaker pattern. We should use in every microservice that call an other microservice but it very very important to use this pattern in the service where we are calling more than one microservice.
+* In Circuit breaker pattern we have need make microservice smart enough to make circuit break. For this we have list of parameters for set circuit breaker
+
+## Spring cloud Hystrix (Netflix Hystrix Framework)
+
+**When Circuit break:**
+
+1) Last n requests to break circuit (if they are failed to response).
+
+2) How many requests failed (from last n requests).
+
+3) Timeout for every request to consider the request is failed.
+
+**When Circuit become normal:**
+
+1) How long circuit break waits for trying again.
+
+**What should we do when Circuit break**
+
+1) Throw an error [it should be last option]
+
+2) Return a default/hard coded response [better option than throw an error]
+
+3) Cache the last response and send to the request [It's coolest option]
+
+* As I'm using spring cloud so we have to use Netflix Hystrix framework. Even Netflix team also not using Hystrix directly they are using from Spring cloud.
+
+**How to use Spring cloud Hystrix** 
+* Add dependency for spring cloud hystrix starter
+	
+	<dependency>
+		<groupId>org.springframework.cloud</groupId>
+		<artifactId>spring-cloud-starter-netflix-hystrix</artifactId>
+	</dependency>
+	
+* Add @EnableCircuitBreaker to application class.
+
+	@SpringBootApplication
+	@EnableEurekaClient
+	@EnableCircuitBreaker
+	public class MovieCatalogServiceApplication {
+		public static void main(String[] args) {
+			SpringApplication.run(MovieCatalogServiceApplication.class, args);
+	}...
+	
+* Add @HystrixCommand to specific method that need circuit breaker.
+	
+	@RequestMapping("/{userId}")
+	@HystrixCommand
+	public List<CatalogItem> getCatalog(@PathVariable String userId){						
+	....		
+* In the last configure parameters for Circuit break and fallback mechanism
+	
+	@HystrixCommand(fallbackMethod = "getFallBackCatalog")
+	public List<CatalogItem> getCatalog(@PathVariable String userId){
+	...
+* Now make one service down Rating service or movie data service then fallback method will called automatically. Then response will be:
+	
+	[
+		{
+		"name": "No Movie",
+		"description": "",
+		"rating": 0
+		}
+	]
+* If any of service down or slow down then it'll response hard coded data but this is not perfect solution so we should make it better to repose with respect to each api like: 
+* Method have to divided into two separate methods for each calling microservice (can be failed or slow to make circuit breaker)
+* Now every method have his own fall back method. This is better solution then before But it'll not work because it's a proxy class with respect to hystrix.
+* Proxy class is a raper class of the instance of api class (Resource class)   
+* Hystrix will not work if child methods are in same class so we have to create two seperate service classes and add those method on it:
+* Please check RatingService and MovieInfoService in services package.
+* Now it's working fine.

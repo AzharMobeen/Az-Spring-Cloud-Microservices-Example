@@ -67,15 +67,25 @@ This microservice will call two other microservices for movie info and movie rat
 
 **When Circuit break:**
 
-1) Last n requests to break circuit (if they are failed to response).
+1) Timeout for every request to consider the request is failed.
+	
+	@HystrixProperty(name = "execution.isolation.thread.timeoutInMilliseconds", value = "2000") 
 
 2) How many requests failed (from last n requests).
+	
+	@HystrixProperty(name = "circuitBreaker.requestVolumeThreshold", value = "5")
 
-3) Timeout for every request to consider the request is failed.
+3) Last n requests persentage to break circuit (if they are failed to response).
+	
+	@HystrixProperty(name = "circuitBreaker.errorThresholdPercentage", value = "50")
+	
+* it means if 50% from last 5 request are failed then make circuit Breaker.
 
 **When Circuit become normal:**
 
 1) How long circuit break waits for trying again.
+
+	@HystrixProperty(name = "circuitBreaker.sleepWindowInMilliseconds", value = "5000")
 
 **What should we do when Circuit break**
 
@@ -132,3 +142,56 @@ This microservice will call two other microservices for movie info and movie rat
 * Hystrix will not work if child methods are in same class so we have to create two seperate service classes and add those method on it:
 * Please check RatingService and MovieInfoService in services package.
 * Now it's working fine.
+
+## Hystrix Dashboard:
+* It's a web application that display what are the different circuit breakers you have in your system.
+* What are the circuits are open closed can also display in this dashboard.
+
+#### Setup Hystrix Dashboard:
+* Need to add couple of dependencies for hystrix dashbaord.
+	
+	<dependency>
+		<groupId>org.springframework.cloud</groupId>
+		<artifactId>spring-cloud-starter-netflix-hystrix-dashboard</artifactId>
+	</dependency>
+	
+	<dependency>
+	   <groupId>org.springframework.boot</groupId>
+	   <artifactId>spring-boot-starter-actuator</artifactId>
+	</dependency>
+
+* Actuator dependency not only for hystrix dashboard, it also provide coulple of others things
+* Now have to enable hystrix dashboard from application main class:
+
+	@EnableHystrixDashboard
+* Add bellow property into application.properties file:
+	
+	management.endpoints.web.exposure.include=hystrix.stream
+* Now Run movie-catalog-service microservice and then [check this url](http://localhost:8081/hystrix)
+* After couple of time movie-catalog-service endpoint please click hystrix moniter button by adding bellow url text field:
+	
+	http://localhost:8081/actuator/hystrix.stream
+* We can either setup in one separate microservice for whole system or every microservice have it's on Hystrix dashbaord.    
+* In this dashboard we can show how many circuits are open ,closed and break with time and threads detail as well. 
+* Every microservice can have it's on hystrix dashbaord.
+
+### Third way to Handle circuit break is BulkHead Pattern:
+* In this pattern we need to create separate thread pools for every method that is calling an other microservice like:
+
+	@HystrixCommand(fallbackMethod = "getFallBackCatalogItem",
+			threadPoolKey = "movieInfoPool",
+			threadPoolProperties  = {
+					@HystrixProperty(name = "coorSize", value = "20"),
+					@HystrixProperty(name = "maxQueueSize", value = "10"),					
+					})
+	public CatalogItem getCatalogItemByRating_v2(Rating rating) { ... }
+	
+	@HystrixCommand(fallbackMethod = "getFallBackUserRating",
+			threadPoolKey = "ratingServicePool",
+			threadPoolProperties  = {
+					@HystrixProperty(name = "coorSize", value = "20"),
+					@HystrixProperty(name = "maxQueueSize", value = "10"),					
+					})
+	public UserRating getUserRating_v2(String userId) { ... }
+* Max 20 threads will be execute at a time can be configurable by coorSize.
+* And Max Queue thread will be configurable by maxQueueSize.

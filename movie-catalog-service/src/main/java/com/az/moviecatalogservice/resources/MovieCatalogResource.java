@@ -32,10 +32,6 @@ public class MovieCatalogResource {
 				.collect(Collectors.toList());		
 	}
 
-	
-
-	
-	
 	// This method will call in case of circuit break happens as fallback
 	public List<CatalogItem> getFallBackCatalog(@PathVariable String userId){
 	
